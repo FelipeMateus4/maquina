@@ -1,7 +1,74 @@
 import json
-import networkx as nx
-import matplotlib.pyplot as plt
-import numpy as np
+
+def convert_to_unary(value):
+    """Converte um valor para seu formato unário correspondente"""
+    if value == '0':
+        return '10'
+    elif value == '1':
+        return '110'
+    elif value == 'B':
+        return '1110'
+    elif value == 'L':
+        return '10'
+    elif value == 'R':
+        return '110'
+    elif value.startswith('q'):
+        n = int(value[1:])
+        return '1' * (n + 1) + '0'
+    else:
+        raise ValueError(f"Valor não reconhecido para conversão: {value}")
+
+def convert_from_unary(value):
+    """Converte um valor do formato unário para o formato original"""
+    if value == '10':
+        return '0'
+    elif value == '110':
+        return '1'
+    elif value == '1110':
+        return 'B'
+    elif value == '10':
+        return 'L'
+    elif value == '110':
+        return 'R'
+    elif value.endswith('0'):
+        n = len(value) - 1
+        return f'q{n}'
+    else:
+        raise ValueError(f"Valor não reconhecido para desconversão: {value}")
+
+def convert_config_to_unary(config):
+    """Converte toda a configuração da máquina de Turing para o formato unário"""
+    unary_config = {
+        'states': [convert_to_unary(state) for state in config['states']],
+        'alphabet': [convert_to_unary(symbol) for symbol in config['alphabet']],
+        'blank_symbol': convert_to_unary(config['blank_symbol']),
+        'initial_state': convert_to_unary(config['initial_state']),
+        'final_states': [convert_to_unary(state) for state in config['final_states']],
+        'transitions': {
+            f"{convert_to_unary(key.split(',')[0])},{convert_to_unary(key.split(',')[1])}": [
+                convert_to_unary(value[0]), convert_to_unary(value[1]), convert_to_unary(value[2])
+            ]
+            for key, value in config['transitions'].items()
+        }
+    }
+    return unary_config
+
+def convert_config_from_unary(unary_config):
+    """Converte a configuração da máquina de Turing do formato unário para o formato original"""
+    config = {
+        'states': [convert_from_unary(state) for state in unary_config['states']],
+        'alphabet': [convert_from_unary(symbol) for symbol in unary_config['alphabet']],
+        'blank_symbol': convert_from_unary(unary_config['blank_symbol']),
+        'initial_state': convert_from_unary(unary_config['initial_state']),
+        'final_states': [convert_from_unary(state) for state in unary_config['final_states']],
+        'transitions': {
+            f"{convert_from_unary(key.split(',')[0])},{convert_from_unary(key.split(',')[1])}": [
+                convert_from_unary(value[0]), convert_from_unary(value[1]), convert_from_unary(value[2])
+            ]
+            for key, value in unary_config['transitions'].items()
+        }
+    }
+    return config
 
 class TuringMachine:
     def __init__(self, config):
@@ -14,30 +81,38 @@ class TuringMachine:
         self.current_state = self.initial_state
 
         # Inicializar a fita com símbolos em branco
-        self.tape = np.array([self.blank_symbol] * 300)
+        self.tape = [self.blank_symbol] * 300
         self.head = 50
 
-        # Criar o grafo das transições
-        self.graph = nx.DiGraph()
-        print("Transitions Format:", self.transitions)  # Depurar formato
-        for key, value in self.transitions.items():
-            print(f"Key: {key}, Value: {value}")  # Verificar conteúdo
-            state, symbol = key.split(',')
-            next_state, new_symbol, direction = value
-            self.graph.add_edge(state, next_state, symbol=symbol, new_symbol=new_symbol, direction=direction)
+    def read_symbol(self):
+        """Lê o símbolo atual da fita considerando os diferentes tamanhos de strings unárias"""
+        symbol = ''
+        pos = self.head
+        while self.tape[pos] != '0':
+            symbol += self.tape[pos]
+            pos += 1
+        return symbol + '0', pos - self.head + 1
 
     def step(self):
-        current_symbol = self.tape[self.head]
+        current_symbol, symbol_length = self.read_symbol()
         key = f"{self.current_state},{current_symbol}"
         action = self.transitions.get(key, None)
 
         if action:
-            self.current_state, new_symbol, direction = action
-            self.tape[self.head] = new_symbol
-            if direction == "R":
-                self.head += 1
-            elif direction == "L":
-                self.head -= 1
+            next_state, new_symbol, direction = action
+
+            # Atualizar a fita
+            new_symbol_length = len(new_symbol)
+            self.tape[self.head:self.head + symbol_length] = list(new_symbol)
+            
+            # Movimentar a cabeça
+            if direction == '110':  # 'R' em unário
+                self.head += new_symbol_length
+            elif direction == '10':  # 'L' em unário
+                self.head -= new_symbol_length
+
+            # Atualizar o estado atual
+            self.current_state = next_state
         else:
             raise Exception(f"No transition found for key {key}")
 
@@ -57,74 +132,48 @@ class TuringMachine:
         print(f"Head Position: {self.head}")
         print("-" * 50)
 
-    def visualize_transitions(self):
-        pos = nx.spring_layout(self.graph)
-        labels = {(u, v): f"{d['symbol']} -> {d['new_symbol']}, {d['direction']}" for u, v, d in self.graph.edges(data=True)}
-        nx.draw(self.graph, pos, with_labels=True, node_size=2000, node_color='lightblue', font_size=10, font_weight='bold')
-        nx.draw_networkx_edge_labels(self.graph, pos, edge_labels=labels)
-        plt.show()
-
-def encode_input(input_string, encoding_scheme):
-    try:
-        encoded = ''.join([encoding_scheme[char] for char in input_string])
-        return encoded
-    except KeyError as e:
-        print(f"Invalid input character: {e}")
-        return None
-
 def load_configuration(json_file):
     with open(json_file, 'r') as file:
         config = json.load(file)
     return config
 
-# Esquema de codificação fornecido
-encoding_scheme = {
-    '0': '1',
-    '1': '11',
-    'B': '111'
-}
+def main():
+    # Carregar configuração de um arquivo JSON com o caminho completo
+    config = load_configuration('turing_machine_config.json')
 
-# Carregar configuração de um arquivo JSON com o caminho completo
-config = load_configuration('turing_machine_config.json')
+    # Receber entrada do usuário
+    input_binary = input("Digite a entrada: ")
 
-# Criar a Máquina de Turing
-tm = TuringMachine(config)
+    # Converter a configuração para o formato unário
+    unary_config = convert_config_to_unary(config)
+    print("\nUnary Configuration:")
+    print(json.dumps(unary_config, indent=2))
 
-# Codificar uma entrada de teste
-input_string = '0111'
-encoded_input = encode_input(input_string, encoding_scheme)
+    # Configurar a Máquina de Turing com a configuração unária
+    tm = TuringMachine(unary_config)
 
-if encoded_input is None:
-    print("rejeitado")
-else:
-    # Verificar se a entrada codificada está no alfabeto da máquina
-    if not all(char in tm.alphabet for char in encoded_input):
-        print("rejeitado")
-    else:
-        # Inserir a entrada codificada na fita
-        tape = [tm.blank_symbol] * 300
-        head_position = 50
-        for i, char in enumerate(encoded_input):
-            tape[head_position + i] = char
+    # Converter a entrada para o formato unário
+    unary_input = ''.join([convert_to_unary(char) for char in input_binary])
 
-        # Configurar a fita da Máquina de Turing
-        tm.tape = tape
-        tm.head = head_position
+    # Inserir a entrada convertida na fita
+    head_position = 50
+    for symbol in unary_input:
+        tm.tape[head_position] = symbol
+        head_position += 1
 
-        # Exibir o estado inicial da fita
-        tm.display()
+    # Configurar a cabeça da fita
+    tm.head = 50
 
-        # Executar a Máquina de Turing
-        result = tm.run()
-        print(result)
+    # Exibir o estado inicial da fita
+    tm.display()
 
-        # Exibir o estado final da fita
-        tm.display()
+    # Executar a Máquina de Turing
+    result = tm.run()
+    print(result)
 
-        # Substituir "B" por "111" na fita final
-        final_tape = ''.join(tm.tape).replace('B', '111')
-        final_tape_display = final_tape.rstrip('1')  # Remover símbolos '111' desnecessários no final
-        print(f"Final Tape after replacement: {final_tape_display}")
+    # Exibir o estado final da fita
+    tape_final = ''.join(tm.tape).rstrip(tm.blank_symbol)
+    print(f"Final Tape: {tape_final}")
 
-        # Visualizar o grafo das transições
-        tm.visualize_transitions()
+if __name__ == "__main__":
+    main()
