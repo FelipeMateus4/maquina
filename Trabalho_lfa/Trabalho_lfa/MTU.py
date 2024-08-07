@@ -74,14 +74,17 @@ def convert_config_from_unary(unary_config):
     return config
 
 def config_to_unary_string(unary_config):
-    """Converte a configuração unária para uma string única"""
-    unary_string = ''.join(unary_config['states']) + '0'
+    """Converte a configuração unária para uma string única, começando e terminando com '000'"""
+    unary_string = '000'
+    unary_string += ''.join(unary_config['states']) + '0'
     unary_string += ''.join(unary_config['alphabet']) + '0'
     unary_string += unary_config['blank_symbol'] + '0'
     unary_string += unary_config['initial_state'] + '0'
     unary_string += ''.join(unary_config['final_states']) + '0'
     for key, value in unary_config['transitions'].items():
         unary_string += key.replace(',', '') + ''.join(value) + '0'
+    unary_string = unary_string.rstrip('0')  # Remover zeros extras no final
+    unary_string += '000'
     return unary_string
 
 class TuringMachine:
@@ -171,7 +174,7 @@ def build_graph(config):
 
 def main():
     # Carregar configuração de um arquivo JSON com o caminho completo
-    config = load_configuration('turing_machine_config.json')
+    config = load_configuration('turing_machine_config2.json')
 
     # Receber entrada do usuário
     input_binary = input("Digite a entrada: ")
@@ -179,7 +182,7 @@ def main():
     # Converter a configuração para o formato unário
     unary_config = convert_config_to_unary(config)
     unary_string = config_to_unary_string(unary_config)
-    print("\nUnary Configuration:")
+    print("\nUnary Configuration (Single Line):")
     print(unary_string)
 
     # Configurar a Máquina de Turing com a configuração unária
