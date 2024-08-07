@@ -1,4 +1,7 @@
 import json
+import networkx as nx
+import matplotlib.pyplot as plt
+import numpy as np
 
 def convert_to_unary(value):
     """Converte um valor para seu formato unário correspondente"""
@@ -70,6 +73,17 @@ def convert_config_from_unary(unary_config):
     }
     return config
 
+def config_to_unary_string(unary_config):
+    """Converte a configuração unária para uma string única"""
+    unary_string = ''.join(unary_config['states']) + '0'
+    unary_string += ''.join(unary_config['alphabet']) + '0'
+    unary_string += unary_config['blank_symbol'] + '0'
+    unary_string += unary_config['initial_state'] + '0'
+    unary_string += ''.join(unary_config['final_states']) + '0'
+    for key, value in unary_config['transitions'].items():
+        unary_string += key.replace(',', '') + ''.join(value) + '0'
+    return unary_string
+
 class TuringMachine:
     def __init__(self, config):
         self.states = config['states']
@@ -113,6 +127,7 @@ class TuringMachine:
 
             # Atualizar o estado atual
             self.current_state = next_state
+            return next_state, new_symbol, direction
         else:
             raise Exception(f"No transition found for key {key}")
 
@@ -124,18 +139,35 @@ class TuringMachine:
         except Exception as e:
             return "rejeitado"
 
-    def display(self):
-        # Exibir a fita sem um monte de 'B' desnecessários
-        tape_display = ''.join(self.tape).rstrip(self.blank_symbol)
-        print(f"State: {self.current_state}")
-        print(f"Tape: {tape_display}")
-        print(f"Head Position: {self.head}")
-        print("-" * 50)
+    def display(self, G, pos):
+        # Atualizar visualização
+        plt.clf()
+        color_map = []
+        for node in G:
+            if node == self.current_state:
+                color_map.append('red')
+            else:
+                color_map.append('green')
+        nx.draw(G, pos, node_color=color_map, with_labels=True, node_size=700, font_size=10, font_weight='bold')
+        edge_labels = nx.get_edge_attributes(G, 'label')
+        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=8)
+        plt.pause(1)
 
 def load_configuration(json_file):
     with open(json_file, 'r') as file:
         config = json.load(file)
     return config
+
+def build_graph(config):
+    G = nx.DiGraph()
+    for state in config['states']:
+        G.add_node(state)
+    for key, value in config['transitions'].items():
+        src, symbol = key.split(',')
+        dst, new_symbol, direction = value
+        label = f"{symbol} -> {new_symbol} ({direction})"
+        G.add_edge(src, dst, label=label)
+    return G
 
 def main():
     # Carregar configuração de um arquivo JSON com o caminho completo
@@ -146,8 +178,9 @@ def main():
 
     # Converter a configuração para o formato unário
     unary_config = convert_config_to_unary(config)
+    unary_string = config_to_unary_string(unary_config)
     print("\nUnary Configuration:")
-    print(json.dumps(unary_config, indent=2))
+    print(unary_string)
 
     # Configurar a Máquina de Turing com a configuração unária
     tm = TuringMachine(unary_config)
@@ -164,16 +197,27 @@ def main():
     # Configurar a cabeça da fita
     tm.head = 50
 
+    # Construir o grafo para visualização
+    G = build_graph(unary_config)
+    pos = nx.spring_layout(G)
+
     # Exibir o estado inicial da fita
-    tm.display()
+    plt.ion()
+    tm.display(G, pos)
 
-    # Executar a Máquina de Turing
-    result = tm.run()
-    print(result)
-
-    # Exibir o estado final da fita
-    tape_final = ''.join(tm.tape).rstrip(tm.blank_symbol)
-    print(f"Final Tape: {tape_final}")
+    # Executar a Máquina de Turing passo a passo
+    while True:
+        try:
+            if tm.current_state in tm.final_states:
+                print("aceito")
+                break
+            input("Pressione Enter para o próximo passo...")
+            next_state, new_symbol, direction = tm.step()
+            tm.display(G, pos)
+            print(f"Next State: {next_state}, New Symbol: {new_symbol}, Direction: {direction}")
+        except Exception as e:
+            print("rejeitado")
+            break
 
 if __name__ == "__main__":
     main()
