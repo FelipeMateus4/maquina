@@ -174,7 +174,7 @@ def build_graph(config):
 
 def main():
     # Carregar configuração de um arquivo JSON com o caminho completo
-    config = load_configuration('turing_machine_config2.json')
+    config = load_configuration('turing_machine_config.json')
 
     # Receber entrada do usuário
     input_binary = input("Digite a entrada: ")
